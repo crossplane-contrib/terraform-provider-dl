@@ -1,0 +1,1 @@
+Simple cli tool that uses the terraform cli registry libraries to find and download a provider plugin binary. The tool allows provider name, semver constraints, os and arch. See https://github.com/Masterminds/semver for semver constraint syntax. 
