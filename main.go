@@ -45,17 +45,6 @@ func main() {
 	if CLI.Arch == "" {
 		CLI.Arch = runtime.GOARCH
 	}
-	if CLI.Output == "" {
-		dir, err := os.Getwd()
-		if err != nil {
-			ctx.FatalIfErrorf(err)
-		}
-		CLI.Output = dir
-	}
-	CLI.Output, err = filepath.Abs(CLI.Output)
-	if err != nil {
-		ctx.FatalIfErrorf(err)
-	}
 
 	// provider simply holds metadata about the provider we want to search the registry for
 	provider := regsrc.NewTerraformProvider(CLI.ProviderName, CLI.OS, CLI.Arch)
@@ -67,10 +56,21 @@ func main() {
 		ctx.FatalIfErrorf(err)
 	}
 
-	// we found a suitable match, so set up local path to save the provider binary
-	osArch := fmt.Sprintf("%s_%s", provider.OS, provider.Arch)
-	pluginLocation := path.Join(CLI.Output, "tf-plugin", provider.RawHost.String(), provider.RawNamespace, provider.RawName, v, osArch)
-	err = os.MkdirAll(pluginLocation, os.ModePerm)
+	if CLI.Output != "" {
+		CLI.Output, err = filepath.Abs(CLI.Output)
+		if err != nil {
+			ctx.FatalIfErrorf(err)
+		}
+	} else {
+		// we found a suitable match, so set up local path to save the provider binary
+		dir, err := os.Getwd()
+		if err != nil {
+			ctx.FatalIfErrorf(err)
+		}
+		osArch := fmt.Sprintf("%s_%s", provider.OS, provider.Arch)
+		CLI.Output = path.Join(dir, "tf-plugin", provider.RawHost.String(), provider.RawNamespace, provider.RawName, v, osArch)
+	}
+	err = os.MkdirAll(CLI.Output, os.ModePerm)
 	if err != nil {
 		ctx.FatalIfErrorf(err)
 	}
@@ -98,7 +98,7 @@ func main() {
 	}
 	zread, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
 	for _, zfh := range zread.File {
-		localPath := path.Join(pluginLocation, zfh.Name)
+		localPath := path.Join(CLI.Output, zfh.Name)
 		fh, err := os.Create(localPath)
 		if err != nil {
 			ctx.FatalIfErrorf(fmt.Errorf("Failed to create local filehandle at %s to save filename '%s' from %s, with err=%v", localPath, zfh.Name, zipURL, err))
@@ -114,7 +114,7 @@ func main() {
 			ctx.FatalIfErrorf(fmt.Errorf("Error copying between zip archive file %s to local file %s from zip retrieved from %s, with err=%v", zfh.Name, localPath, zipURL, err))
 		}
 
-		fmt.Printf("\nWrote provider plugin to local path %s\nWhere terraform-provider-gen or a terraform-provider-runtime based provider require a plugin path argument or environment variable, use the path of the directory containing the binary, ie:\n%s\n", localPath, pluginLocation)
+		fmt.Printf("\nWrote provider plugin to local path %s\nWhere terraform-provider-gen or a terraform-provider-runtime based provider require a plugin path argument or environment variable, use the path of the directory containing the binary, ie:\n%s\n", localPath, CLI.Output)
 	}
 }
 
