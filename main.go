@@ -16,6 +16,7 @@ import (
 
 	"github.com/Masterminds/semver"
 	"github.com/alecthomas/kong"
+	"github.com/crossplane-contrib/terraform-provider-gen/pkg/provider"
 	"github.com/hashicorp/terraform/registry"
 	"github.com/hashicorp/terraform/registry/regsrc"
 	"github.com/hashicorp/terraform/registry/response"
@@ -27,11 +28,20 @@ var CLI struct {
 	OS string `help:"Target operating system for provider binary."`
 	Arch string `help:"Target system architecture for provider binary."`
 	Output string `help:"The binary will be written to a subdirectory ensuring unique provider+version+arch within the --output location."`
+	Config string `help:"Path to a terraform-provider-gen config file."`
 }
 
 func main() {
 	ctx := kong.Parse(&CLI)
 	// arg defaults
+	if CLI.Config != "" {
+		cfg, err := provider.ConfigFromFile(CLI.Config)
+		if err != nil {
+			ctx.FatalIfErrorf(err)
+		}
+		CLI.ProviderName = cfg.Name
+		CLI.Version = cfg.ProviderVersion
+	}
 	if len(strings.Split(CLI.ProviderName, "/")) < 2 {
 		CLI.ProviderName = "hashicorp/" + CLI.ProviderName
 	}
