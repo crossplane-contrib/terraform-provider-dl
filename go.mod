@@ -1,4 +1,4 @@
-module github.com/crossplane-contrib/terraform-provider-dl
+module github.com/ulucinar/terraform-provider-dl
 
 go 1.14
 
