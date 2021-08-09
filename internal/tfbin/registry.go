@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/hashicorp/terraform/registry"
 	"github.com/hashicorp/terraform/registry/regsrc"
@@ -19,7 +20,11 @@ type TerraformRegistry struct {
 }
 
 func (tr *TerraformRegistry) tfProvider(target ProviderMeta) *regsrc.TerraformProvider {
-	return regsrc.NewTerraformProvider(target.Name, target.OS, target.Arch)
+	name := target.Name
+	if target.Namespace != "" {
+		name = fmt.Sprintf("%s/%s", target.Namespace, name)
+	}
+	return regsrc.NewTerraformProvider(name, target.OS, target.Arch)
 }
 
 func (tr *TerraformRegistry) Search(query ProviderMeta) (ProviderMeta, error) {
@@ -89,26 +94,36 @@ func (tr *TerraformRegistry) ProviderMetaReader(pm ProviderMeta) (io.ReadCloser,
 		return nil, "", fmt.Errorf("Error reading body from request to %s: %v", zipURL, err)
 	}
 	zread, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
-	if len(zread.File) > 1 {
-		return nil, "", fmt.Errorf("Provider zip archive unexpectedly contains multiple files, unsure which is the provider. Zip URL=%s", zipURL)
+	pluginPrefix := fmt.Sprintf("terraform-provider-%s", pm.Name)
+	found := false
+	for i := range zread.File {
+		zfh := zread.File[i]
+		if !strings.HasPrefix(zfh.Name, pluginPrefix) {
+			continue
+		}
+		found = true
+
+		fh, err := zfh.Open()
+		if err != nil {
+			return nil, "", err
+		}
+		if tr.cache == nil {
+			return fh, zfh.Name, nil
+		}
+		defer fh.Close()
+		wc, err := tr.cache.ProviderMetaWriter(pm, zfh.Name)
+		if err != nil {
+			return nil, "", errors.Wrap(err, "Error initializing local cache to store provider binary.")
+		}
+		defer wc.Close()
+		_, err = io.Copy(wc, fh)
+		if err != nil {
+			return nil, "", errors.Wrap(err, "Error writing provider binary from registry to local cache.")
+		}
 	}
-	zfh := zread.File[0]
-	fh, err := zfh.Open()
-	if err != nil {
-		return nil, "", err
-	}
-	if tr.cache == nil {
-		return fh, zfh.Name, nil
-	}
-	defer fh.Close()
-	wc, err := tr.cache.ProviderMetaWriter(pm, zfh.Name)
-	if err != nil {
-		return nil, "", errors.Wrap(err, "Error initializing local cache to store provider binary.")
-	}
-	defer wc.Close()
-	_, err = io.Copy(wc, fh)
-	if err != nil {
-		return nil, "", errors.Wrap(err, "Error writing provider binary from registry to local cache.")
+
+	if !found {
+		return nil, "", fmt.Errorf("provider plugin binary not found with prefix: %s", pluginPrefix)
 	}
 	return tr.cache.ProviderMetaReader(pm)
 }
