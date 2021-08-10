@@ -2,14 +2,16 @@ package main
 
 import (
 	"fmt"
-	"github.com/crossplane-contrib/terraform-provider-dl/internal/tfbin"
-	"github.com/spf13/afero"
 	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/spf13/afero"
+
+	"github.com/ulucinar/terraform-provider-dl/internal/tfbin"
 
 	"github.com/alecthomas/kong"
 	"github.com/crossplane-contrib/terraform-provider-gen/pkg/provider"
